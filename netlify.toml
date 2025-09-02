@@ -1,9 +1,17 @@
-            [build]
-              command = "npm install"
-              functions = "netlify/functions"
-              publish = "frontend"
-    
-            [[redirects]]
-              from = "/api/*"
-              to = "/.netlify/functions/api/:splat"
-              status = 200
+# Configuración para el build del frontend
+[build]
+  # El comando se ejecuta desde la carpeta raíz, por eso navegamos a 'frontend'
+  command = "cd frontend && npm install && npm run build"
+  # Dónde encontrar los archivos del sitio ya construido
+  publish = "frontend/dist"
+  # Dónde están tus funciones de backend
+  functions = "netlify/functions"
+
+# Regla para redirigir las llamadas de API a tus funciones
+[[redirects]]
+  # Cualquier llamada que empiece con /api/...
+  from = "/api/*"
+  # ...se enviará a tu función llamada 'api.js'
+  to = "/.netlify/functions/api/:splat"
+  # Código de estado HTTP 200 (OK)
+  status = 200
