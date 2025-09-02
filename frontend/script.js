@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Usar setTimeout para evitar que la UI se congele durante la generación
         setTimeout(() => {
             try {
-                fetch('/generate-prayer', {
+                fetch('/api/generate-prayer', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
