@@ -1,41 +1,53 @@
-    1         const express = require('express');
-    2         const serverless = require('serverless-http');
-    3         const { GoogleGenerativeAI } = require('@google/generative-ai');
-    4 
-    5         const app = express();
-    6         const router = express.Router();
-    7 
-    8         if (!process.env.GEMINI_API_KEY) {
-    9           throw new Error('Falta la variable de entorno GEMINI_API_KEY.');
-   10         }
-   11         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-   12 
-   13         router.post('/generate-prayer', async (req, res) => {
-   14           try {
-   15             // Express no parsea el body automáticamente en este entorno, lo leemos manualmente
-   16             const body = JSON.parse(req.body);
-   17             const { peticion } = body;
-   18 
-   19             if (!peticion) {
-   20               return res.status(400).json({ error: 'La petición no puede estar vacía.' });
-   21             }
-   22             const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-   23             const prompt = `Actúa como un teólogo y guía espiritual cristiano. Tu tarea es generar 
-      una oración cristiana extensa, de aproximadamente 60,000 a 70,000 caracteres...`; // El prompt 
-      completo
-   24 
-   25             const result = await model.generateContent(prompt);
-   26             const response = await result.response;
-   27             const oracionGenerada = response.text();
-   28 
-   29             res.json({ oracion: oracionGenerada });
-   30           } catch (error) {
-   31             console.error('Error en la función:', error);
-   32             res.status(500).json({ error: 'Ocurrió un error en el servidor al generar la oración.'
-      });
-   33           }
-   34         });
-   35 
-   36         app.use('/api/', router);
-   37 
-   38         module.exports.handler = serverless(app);
+const express = require('express');
+const serverless = require('serverless-http');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+const app = express();
+// Middleware para parsear JSON automáticamente de forma segura
+app.use(express.json()); 
+
+const router = express.Router();
+
+if (!process.env.GEMINI_API_KEY) {
+  throw new Error('Falta la variable de entorno GEMINI_API_KEY.');
+}
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+router.post('/generate-prayer', async (req, res) => {
+  try {
+    // Gracias a app.use(express.json()), req.body ya es un objeto
+    const { peticion } = req.body;
+
+    if (!peticion) {
+      return res.status(400).json({ error: 'La petición no puede estar vacía.' });
+    }
+
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const prompt = `Actúa como un teólogo y guía espiritual cristiano. Tu tarea es generar una oración cristiana extensa, de aproximadamente 60,000 a 70,000 caracteres... basada en esta petición: ${peticion}`; // El prompt completo
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+
+    // --- MEJORA IMPORTANTE: REGISTRO Y DEPURACIÓN ---
+    // Esto nos mostrará en los logs de Netlify qué está respondiendo Google EXACTAMENTE.
+    console.log('Respuesta completa de Google AI:', JSON.stringify(response, null, 2));
+
+    const oracionGenerada = response.text();
+
+    if (oracionGenerada === undefined || oracionGenerada === null) {
+      // Si el texto es undefined, es probable que la respuesta fuera bloqueada.
+      console.error('La respuesta de la IA fue bloqueada o no contiene texto.');
+      throw new Error('La respuesta de la IA fue bloqueada o no contiene texto. Revisa los logs para ver la respuesta completa.');
+    }
+    
+    res.json({ oracion: oracionGenerada });
+
+  } catch (error) {
+    console.error('Error en la función:', error);
+    res.status(500).json({ error: 'Ocurrió un error en el servidor al generar la oración.' });
+  }
+});
+
+app.use('/api/', router);
+
+module.exports.handler = serverless(app);
