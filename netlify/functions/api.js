@@ -79,8 +79,8 @@ router.post('/generate-prayer', async (req, res) => {
   }
 });
 
-// Montamos el router en la ruta que Netlify usará internamente
-app.use('/.netlify/functions/api', router);
+// CORRECCIÓN: Usamos una ruta base más genérica para que coincida con la solicitud.
+app.use('/', router);
 
 // Exportamos el handler para que Netlify pueda ejecutar la función
 module.exports.handler = serverless(app);
