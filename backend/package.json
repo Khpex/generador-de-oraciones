@@ -1,16 +1,11 @@
-         {
-           "name": "generador-oraciones-backend",
-           "version": "1.0.0",
-           "description": "Backend para el generador de oraciones.",
-           "main": "server.js",
-           "scripts": {
-             "start": "node server.js"
-           },
-           "dependencies": {
-            "express": "^4.19.2",
-            "@google/generative-ai": "^0.11.1"
-          },
-          "engines": {
-            "node": "18.x"
-          }
-        }
+             {
+               "name": "generador-oraciones-backend",
+               "version": "2.0.0",
+               "description": "Backend para el generador de oraciones (versión serverless)",
+               "main": "server.js",
+               "dependencies": {
+                 "express": "^4.19.2",
+                 "@google/generative-ai": "^0.11.1",
+                 "serverless-http": "^3.2.0"
+              }
+            }
