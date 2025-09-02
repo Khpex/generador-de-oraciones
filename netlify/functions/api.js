@@ -1,20 +1,20 @@
 const express = require('express');
-const path = require('path');
+const serverless = require('serverless-http');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
-const port = process.env.PORT || 3000;
+// Middleware para parsear el cuerpo de las solicitudes JSON automáticamente
+app.use(express.json());
 
+const router = express.Router();
+
+// Verificación de la API Key (esto se ejecuta solo una vez cuando la función se inicializa)
 if (!process.env.GEMINI_API_KEY) {
   throw new Error('Falta la variable de entorno GEMINI_API_KEY.');
 }
-
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-app.use(express.json());
-app.use(express.static(path.join(__dirname, '../frontend')));
-
-// Función para dividir la oración en secciones temáticas
+// Tu lista de secciones, que usaremos en el prompt
 const seccionesOracion = [
   "Invitación a la presencia de Dios y adoración inicial",
   "Reflexión sobre la grandeza y santidad de Dios en relación con la petición",
@@ -28,7 +28,7 @@ const seccionesOracion = [
   "Bendición final, paz y entrega al Espíritu Santo"
 ];
 
-app.post('/generate-prayer', async (req, res) => {
+router.post('/generate-prayer', async (req, res) => {
   try {
     const { peticion } = req.body;
     if (!peticion || typeof peticion !== 'string' || peticion.trim().length === 0) {
@@ -37,84 +37,38 @@ app.post('/generate-prayer', async (req, res) => {
 
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    // Configuración para maximizar longitud
-    const generationConfig = {
-      maxOutputTokens: 8192, // Máximo razonable por respuesta
-      temperature: 0.7,
-      topP: 0.95,
-      topK: 40,
-    };
+    // Hemos combinado tu lógica de 10 secciones en un único y potente prompt.
+    // Esto es mucho más rápido y evita el timeout de Netlify.
+    const prompt = `
+      Actúa como un teólogo cristiano profundamente formado en las Escrituras y la espiritualidad pastoral.
+      Tu tarea es escribir una oración cristiana extensa, coherente y espiritualmente profunda,
+      basada en la siguiente petición del creyente: "${peticion}".
 
-    const oracionCompleta = [];
+      La oración debe fluir a través de las siguientes secciones temáticas, conectándolas de forma natural, sin usar títulos ni separadores:
+      ${seccionesOracion.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
-    for (const seccion of seccionesOracion) {
-      const prompt = `
-Actúa como un teólogo cristiano profundamente formado en las Escrituras, la tradición patrística y la espiritualidad pastoral. Eres un guía espiritual sabio, compasivo y lleno de fe. Tu tarea es escribir una sección continua y profunda de una oración cristiana extensa, como parte de un todo coherente que gira en torno a la siguiente petición del creyente: "${peticion}".
+      **Instrucciones específicas:**
+      1.  Escribe en un tono reverente, solemne y devocional.
+      2.  Usa lenguaje bíblico, imágenes poéticas y conceptos teológicos sólidos.
+      3.  La oración debe ser una sola pieza de texto continua y muy extensa.
+      4.  Mantén un tono íntimo, lleno de esperanza y sumisión a la voluntad de Dios.
 
-Esta sección debe tratarse de: "${seccion}".
+      Comienza la oración aquí:
+    `;
 
-**Instrucciones específicas:**
-1. Escribe en primera persona plural ("Señor, te adoramos...", "Te damos gracias...") o singular si es íntimo ("Ayúdame, Señor..."), manteniendo un tono reverente y devocional.
-2. Usa lenguaje bíblico, imágenes poéticas, referencias a pasajes sagrados (sin citar versículos literalmente), y conceptos teológicos sólidos (gracia, redención, santidad, etc.).
-3. Asegúrate de que esta sección fluya naturalmente desde la anterior y prepare el terreno para la siguiente. Usa conectores como "Y ahora, oh Dios...", "También te suplicamos...", "Por eso, en tu presencia...".
-4. Longitud: aproximadamente 6,000–8,000 palabras por sección (máximo posible en esta respuesta).
-5. No uses títulos, numeración ni separadores. Solo continúa el flujo de la oración.
-6. Mantén un tono solemne, íntimo, lleno de esperanza y sumisión a la voluntad de Dios.
-7. Si es una sección de súplica, incluye confesión, humildad, y confianza en Cristo como mediador.
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    
+    // Añadimos un log para poder depurar la respuesta de la IA en los logs de Netlify
+    console.log('Respuesta completa de Google AI:', JSON.stringify(response, null, 2));
+    
+    const oracionFinal = response.text();
 
-Recuerda: esta no es una reflexión teológica fría, sino una oración viva, ardiente, espiritualmente profunda, que podría ser leída en un retiro, un culto íntimo o una hora de intercesión profunda.
-
-Comienza la oración aquí:
-      `;
-
-      try {
-        const result = await model.generateContent({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig,
-        });
-
-        const response = await result.response;
-        const texto = response.text().trim();
-
-        if (texto) {
-          oracionCompleta.push(texto);
-        }
-
-        // Pausa opcional para no saturar la API
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-      } catch (error) {
-        console.warn(`Error generando sección "${seccion}":`, error.message);
-        // Incluir mensaje de error suave en la oración (opcional)
-        oracionCompleta.push(`(El servidor tuvo dificultades para generar esta sección, pero tu corazón es oído por Dios.)`);
-      }
+    if (!oracionFinal) {
+      throw new Error('La respuesta de la IA fue bloqueada o no contiene texto. Revisa los logs de la función.');
     }
 
-    // Unir todas las secciones
-    let oracionFinal = oracionCompleta.join('\n\n');
-
-    // Validar longitud mínima
-    const palabras = oracionFinal.trim().split(/\s+/).length;
-    console.log(`Oración generada: ${palabras} palabras`);
-
-    // Si es muy corta, añadir una sección final de cierre fuerte
-    if (palabras < 50000) {
-      const modeloCierre = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      const promptCierre = `
-Termina esta oración con un cierre profundamente pastoral, lleno de paz, esperanza y entrega al Señor, en tono de doxología final. 
-Refuerza la confianza en que Dios escucha, ama y actúa según su perfecta voluntad. 
-Longitud: 1000–2000 palabras. Sin títulos. Continúa el flujo.
-      `;
-      const result = await modeloCierre.generateContent(promptCierre);
-      const cierre = await result.response.text();
-      oracionFinal += '\n\n' + cierre.trim();
-    }
-
-    res.json({
-      oracion: oracionFinal,
-      palabras: oracionFinal.trim().split(/\s+/).length,
-      secciones: seccionesOracion.length
-    });
+    res.json({ oracion: oracionFinal.trim() });
 
   } catch (error) {
     console.error('Error en el endpoint /generate-prayer:', error);
@@ -125,11 +79,8 @@ Longitud: 1000–2000 palabras. Sin títulos. Continúa el flujo.
   }
 });
 
-// Sirve el frontend
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/index.html'));
-});
+// Montamos el router en la ruta que Netlify usará internamente
+app.use('/.netlify/functions/api', router);
 
-app.listen(port, () => {
-  console.log(`Servidor escuchando en http://localhost:${port}`);
-});
+// Exportamos el handler para que Netlify pueda ejecutar la función
+module.exports.handler = serverless(app);
